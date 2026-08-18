@@ -76,6 +76,19 @@
     if (!hasLoadedOnce) showError();
   });
 
+  // The embedded page (orlixa.art) posts this message when a feature like
+  // voice recording can't get microphone access inside the app's WebView
+  // (e.g. RECORD_AUDIO not yet granted). Open that URL in the system
+  // browser instead, where mic permission works normally.
+  window.addEventListener('message', function (event) {
+    if (!event.data || event.data.type !== 'openExternal' || !event.data.url) return;
+    if (window.cordova && window.cordova.InAppBrowser) {
+      window.cordova.InAppBrowser.open(event.data.url, '_system');
+    } else {
+      window.open(event.data.url, '_system');
+    }
+  });
+
   window.addEventListener('online', function () {
     if (!hasLoadedOnce) loadApp();
   });
@@ -116,3 +129,4 @@
     document.addEventListener('DOMContentLoaded', initApp, false);
   }
 })();
+
