@@ -1,0 +1,161 @@
+:root {
+  --bg: #0b0b14;
+  --accent-1: #6C5CE7;
+  --accent-2: #00D9F5;
+  --text: #F3F4FA;
+  --muted: #9CA0BC;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+}
+
+/* ---------- Web frame (the actual site) ---------- */
+#web-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--bg);
+  opacity: 0;
+  transition: opacity .25s ease;
+}
+#web-frame.ready {
+  opacity: 1;
+}
+
+/* ---------- Loading screen ---------- */
+#loading-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(108,92,231,0.35), transparent 45%),
+    radial-gradient(circle at 75% 75%, rgba(0,217,245,0.25), transparent 45%),
+    var(--bg);
+  z-index: 20;
+  transition: opacity .3s ease, visibility .3s ease;
+}
+#loading-screen.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.loading-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo-badge {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  box-shadow: 0 8px 30px rgba(108, 92, 231, 0.45);
+}
+
+.app-name {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text);
+}
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid rgba(255,255,255,0.15);
+  border-top-color: var(--accent-2);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---------- Error / offline screen ---------- */
+#error-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  z-index: 30;
+  padding: 24px;
+}
+#error-screen.hidden {
+  display: none;
+}
+
+.error-inner {
+  max-width: 320px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.error-icon {
+  font-size: 40px;
+  margin-bottom: 6px;
+}
+
+.error-inner h1 {
+  font-size: 18px;
+  margin: 0;
+  color: var(--text);
+}
+
+.error-inner p {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+#retry-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 12px 28px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  cursor: pointer;
+}
+#retry-btn:active {
+  opacity: 0.85;
+}

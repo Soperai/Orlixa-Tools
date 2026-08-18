@@ -1,0 +1,36 @@
+{
+  "name": "orlixa-webview-app",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Orlixa.art webview app for Monaca",
+  "repository": "",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "browser-sync start -s www/ --watch --port 8080 --ui-port 8081",
+    "monaca:preview": "npm run dev"
+  },
+  "browserslist": [
+    "Android >= 7",
+    "IOS >= 12",
+    "Safari >= 12",
+    "Chrome >= 60",
+    "Firefox >= 55",
+    "Samsung >= 8"
+  ],
+  "cordova": {
+    "plugins": {
+      "cordova-plugin-statusbar": {},
+      "cordova-plugin-inappbrowser": {},
+      "cordova-plugin-network-information": {}
+    }
+  },
+  "dependencies": {
+    "cordova-plugin-inappbrowser": "^5.0.0",
+    "cordova-plugin-network-information": "^3.0.0",
+    "cordova-plugin-statusbar": "3.0.0"
+  },
+  "devDependencies": {
+    "browser-sync": "^2.26.7",
+    "cordova": "^12.0.0"
+  }
+}
