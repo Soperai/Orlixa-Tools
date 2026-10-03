@@ -38,8 +38,21 @@ jobs:
       - name: Install project dependencies
         run: npm install
 
+      # Plugins (including cordova-plugin-android-permissions) are restored
+      # from config.xml when the platform is added.
       - name: Add Android platform
         run: cordova platform add android
+
+      - name: Verify camera/mic permissions and plugin
+        run: |
+          MANIFEST=platforms/android/app/src/main/AndroidManifest.xml
+          echo "---- permissions in generated manifest ----"
+          grep "uses-permission" "$MANIFEST" || true
+          grep -q "android.permission.CAMERA" "$MANIFEST" || { echo "::error::CAMERA permission missing from manifest"; exit 1; }
+          grep -q "android.permission.RECORD_AUDIO" "$MANIFEST" || { echo "::error::RECORD_AUDIO permission missing from manifest"; exit 1; }
+          echo "---- installed plugins ----"
+          cordova plugin ls
+          cordova plugin ls | grep -q "cordova-plugin-android-permissions" || { echo "::error::permissions plugin not installed"; exit 1; }
 
       - name: Build debug APK
         run: cordova build android --debug --verbose
