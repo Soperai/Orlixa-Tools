@@ -57,9 +57,25 @@
       showError();
     }, LOAD_TIMEOUT_MS);
 
-    // Bust the cache with a query param only on manual retries after a failure,
-    // to avoid re-fetching on every normal app open.
     frame.src = APP_URL;
+  }
+
+  // Ask Android for camera + microphone access. Never allowed to break loading.
+  function requestMediaPermissions() {
+    try {
+      var P = window.cordova && cordova.plugins && cordova.plugins.permission;
+      if (!P) {
+        console.warn('Permissions plugin not available');
+        return;
+      }
+      P.requestPermissions(
+        [P.CAMERA, P.RECORD_AUDIO],
+        function (status) { console.log('Permissions result', status); },
+        function (err) { console.warn('Permissions request failed', err); }
+      );
+    } catch (e) {
+      console.warn('Permissions request error', e);
+    }
   }
 
   frame.addEventListener('load', function () {
@@ -81,10 +97,11 @@
   });
 
   function initApp() {
+    // 1) Load the site first, so nothing below can block it.
     loadApp();
 
-    var P = cordova.plugins.permission;
-P.requestPermissions([P.CAMERA, P.RECORD_AUDIO], function () {}, function () {});
+    // 2) Then ask for camera/mic permissions (safe, wrapped in try/catch).
+    requestMediaPermissions();
 
     // Android hardware back button: we can't reach into the cross-origin
     // iframe's history, so use a "press back again to exit" pattern.
