@@ -1,155 +1,174 @@
+/* Orlixa — Cordova shell
+ *
+ * Wraps https://orlixa.art/app/ with native splash, offline screen,
+ * Android permission prompts and back-button handling.
+ *
+ * LOAD_MODE
+ *   'direct' (recommended): after a reachability check the WebView navigates
+ *            to the site as the top-level page. No X-Frame-Options problems,
+ *            first-party cookies, camera/mic prompts work natively.
+ *            NOTE: once it navigates, this script is gone (different origin),
+ *            so later offline errors are handled by Android, not by this file.
+ *   'iframe': keeps the site inside this shell. Requires the server to allow
+ *            framing (CSP frame-ancestors https://localhost) and
+ *            SameSite=None; Secure session cookies.
+ */
 (function () {
   'use strict';
 
-  // The site this app wraps. Change here if the path ever moves.
+  // ---------- Config ----------
   var APP_URL = 'https://orlixa.art/app/';
+  var APP_ORIGIN = new URL(APP_URL).origin;
+  var LOAD_MODE = 'direct';            // 'direct' | 'iframe'
   var LOAD_TIMEOUT_MS = 15000;
+  var ANDROID_PERMISSIONS = [
+    'android.permission.CAMERA',
+    'android.permission.RECORD_AUDIO'
+  ];
 
+  // ---------- DOM ----------
   var frame = document.getElementById('web-frame');
   var loadingScreen = document.getElementById('loading-screen');
   var errorScreen = document.getElementById('error-screen');
   var retryBtn = document.getElementById('retry-btn');
 
-  var loadTimer = null;
-  var hasLoadedOnce = false;
-  var backButtonPressedOnce = false;
+  var state = { loadTimer: null, hasLoadedOnce: false, backPressedOnce: false };
 
-  function isOnline() {
-    if (window.navigator && navigator.connection && typeof navigator.connection.type !== 'undefined') {
-      return navigator.connection.type !== 'none';
+  // ---------- UI states ----------
+  var ui = {
+    loading: function () {
+      errorScreen.classList.add('hidden');
+      loadingScreen.classList.remove('hidden');
+      frame.classList.remove('ready');
+    },
+    error: function () {
+      clearTimeout(state.loadTimer);
+      loadingScreen.classList.add('hidden');
+      errorScreen.classList.remove('hidden');
+      frame.classList.remove('ready');
+    },
+    ready: function () {
+      clearTimeout(state.loadTimer);
+      state.hasLoadedOnce = true;
+      errorScreen.classList.add('hidden');
+      frame.classList.add('ready');
+      setTimeout(function () { loadingScreen.classList.add('hidden'); }, 150);
     }
+  };
+
+  // ---------- Network ----------
+  function isOnline() {
+    var c = navigator.connection;
+    if (c && typeof c.type !== 'undefined') return c.type !== 'none';
     return navigator.onLine !== false;
   }
 
-  function showLoading() {
-    errorScreen.classList.add('hidden');
-    loadingScreen.classList.remove('hidden');
+  // Resolves if the server answers at all (opaque response is fine).
+  function checkReachable() {
+    return new Promise(function (resolve, reject) {
+      var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var t = setTimeout(function () { if (ctrl) ctrl.abort(); reject(new Error('timeout')); }, LOAD_TIMEOUT_MS - 1000);
+      fetch(APP_URL, { mode: 'no-cors', cache: 'no-store', signal: ctrl ? ctrl.signal : undefined })
+        .then(function () { clearTimeout(t); resolve(); })
+        .catch(function (e) { clearTimeout(t); reject(e); });
+    });
   }
 
-  function showError() {
-    clearTimeout(loadTimer);
-    loadingScreen.classList.add('hidden');
-    errorScreen.classList.remove('hidden');
-    frame.classList.remove('ready');
+  // ---------- Android permissions ----------
+  // Needs cordova-plugin-android-permissions. Always resolves (never blocks
+  // loading); the site shows its own message if the user denies.
+  var permissions = {
+    plugin: function () {
+      return window.cordova && cordova.plugins && cordova.plugins.permissions;
+    },
+    request: function () {
+      return new Promise(function (resolve) {
+        var p = permissions.plugin();
+        if (!p) return resolve({ supported: false });
+        p.requestPermissions(
+          ANDROID_PERMISSIONS,
+          function (status) { resolve({ supported: true, granted: !!(status && status.hasPermission) }); },
+          function () { resolve({ supported: true, granted: false }); }
+        );
+      });
+    }
+  };
+
+  // ---------- Loaders ----------
+  function loadDirect() {
+    checkReachable().then(function () {
+      clearTimeout(state.loadTimer);
+      window.location.replace(APP_URL);
+    }, ui.error);
   }
 
-  function showFrame() {
-    clearTimeout(loadTimer);
-    hasLoadedOnce = true;
-    errorScreen.classList.add('hidden');
-    frame.classList.add('ready');
-    // Small delay so the fade-in feels intentional rather than a flash.
-    setTimeout(function () {
-      loadingScreen.classList.add('hidden');
-    }, 150);
+  function loadIframe() {
+    frame.src = APP_URL;   // 'load' / timeout handlers below finish the job
   }
 
   function loadApp() {
-    if (!isOnline()) {
-      showError();
-      return;
-    }
-    showLoading();
-    frame.classList.remove('ready');
-
-    clearTimeout(loadTimer);
-    loadTimer = setTimeout(function () {
-      showError();
-    }, LOAD_TIMEOUT_MS);
-
-    // FIX: open the site as the top-level page instead of inside an iframe.
-    // Iframes were blocked by the server's X-Frame-Options header and break
-    // session cookies. First do a quick reachability check so we can still
-    // show our own error screen if the server is down.
-    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    var abortTimer = setTimeout(function () { if (ctrl) ctrl.abort(); }, LOAD_TIMEOUT_MS - 1000);
-    fetch(APP_URL, { mode: 'no-cors', cache: 'no-store', signal: ctrl ? ctrl.signal : undefined })
-      .then(function () {
-        clearTimeout(abortTimer);
-        clearTimeout(loadTimer);
-        window.location.replace(APP_URL);
-      })
-      .catch(function () {
-        clearTimeout(abortTimer);
-        showError();
-      });
+    if (!isOnline()) return ui.error();
+    ui.loading();
+    clearTimeout(state.loadTimer);
+    state.loadTimer = setTimeout(ui.error, LOAD_TIMEOUT_MS);
+    if (LOAD_MODE === 'iframe') loadIframe(); else loadDirect();
   }
 
+  // ---------- Iframe-mode events ----------
   frame.addEventListener('load', function () {
-    // about:blank fires 'load' too; ignore it.
-    if (frame.src === 'about:blank') return;
-    showFrame();
+    if (LOAD_MODE !== 'iframe' || frame.src === 'about:blank') return;
+    ui.ready();
   });
+  frame.addEventListener('error', ui.error);
 
-  frame.addEventListener('error', showError);
-
-  retryBtn.addEventListener('click', loadApp);
-
-  window.addEventListener('offline', function () {
-    if (!hasLoadedOnce) showError();
-  });
-
-  // The embedded page (orlixa.art) posts this message when a feature like
-  // voice recording can't get microphone access inside the app's WebView
-  // (e.g. RECORD_AUDIO not yet granted). Open that URL in the system
-  // browser instead, where mic permission works normally.
+  // Embedded page asks us to open a URL in the system browser (iframe mode).
+  // Only accept messages from the app's own origin and https URLs.
   window.addEventListener('message', function (event) {
-    if (!event.data || event.data.type !== 'openExternal' || !event.data.url) return;
-    if (window.cordova && window.cordova.InAppBrowser) {
-      window.cordova.InAppBrowser.open(event.data.url, '_system');
-    } else {
-      window.open(event.data.url, '_system');
-    }
+    var d = event.data;
+    if (event.origin !== APP_ORIGIN) return;
+    if (!d || d.type !== 'openExternal' || typeof d.url !== 'string') return;
+    var url;
+    try { url = new URL(d.url); } catch (e) { return; }
+    if (url.protocol !== 'https:') return;
+    if (window.cordova && cordova.InAppBrowser) cordova.InAppBrowser.open(url.href, '_system');
+    else window.open(url.href, '_system');
   });
 
-  window.addEventListener('online', function () {
-    if (!hasLoadedOnce) loadApp();
-  });
+  // ---------- Misc listeners ----------
+  retryBtn.addEventListener('click', loadApp);
+  window.addEventListener('offline', function () { if (!state.hasLoadedOnce) ui.error(); });
+  window.addEventListener('online', function () { if (!state.hasLoadedOnce) loadApp(); });
 
-  // Ask Android for camera + microphone BEFORE the site tries getUserMedia().
-  // Needs: cordova plugin add cordova-plugin-android-permissions
-  // and <uses-permission android:name="android.permission.CAMERA"/> in config.xml
-  function requestMediaPermissions(done) {
-    var perms = window.cordova && cordova.plugins && cordova.plugins.permissions;
-    if (!perms) { done(); return; }
-    var list = ['android.permission.CAMERA', 'android.permission.RECORD_AUDIO'];
-    perms.requestPermissions(list, function () { done(); }, function () { done(); });
-  }
-
-  function initApp() {
-    requestMediaPermissions(loadApp);
-
-    // Android hardware back button: we can't reach into the cross-origin
-    // iframe's history, so use a "press back again to exit" pattern.
+  // Iframe mode only: we can't reach into the cross-origin frame's history,
+  // so use "press back again to exit". In direct mode Cordova's default
+  // back handling (WebView history, then exit) is used.
+  function setupBackButton() {
+    if (LOAD_MODE !== 'iframe') return;
     document.addEventListener('backbutton', function (e) {
       e.preventDefault();
-      if (!window.navigator.app) return;
-
-      if (backButtonPressedOnce) {
-        navigator.app.exitApp();
-        return;
-      }
-      backButtonPressedOnce = true;
-      setTimeout(function () { backButtonPressedOnce = false; }, 2000);
+      if (!navigator.app) return;
+      if (state.backPressedOnce) return navigator.app.exitApp();
+      state.backPressedOnce = true;
+      setTimeout(function () { state.backPressedOnce = false; }, 2000);
     }, false);
+  }
 
-    // Keep the status bar readable against the dark theme.
+  function setupChrome() {
     if (window.StatusBar) {
       StatusBar.styleLightContent();
       StatusBar.backgroundColorByHexString('#0b0b14');
     }
-
-    if (window.navigator && navigator.splashscreen) {
-      // Hide the native splash once our own loading screen has taken over.
-      navigator.splashscreen.hide();
-    }
+    if (navigator.splashscreen) navigator.splashscreen.hide();
   }
 
-  if (window.cordova) {
-    document.addEventListener('deviceready', initApp, false);
-  } else {
-    // Browser preview (no Cordova) - just run directly.
-    document.addEventListener('DOMContentLoaded', initApp, false);
+  // ---------- Boot ----------
+  function init() {
+    setupChrome();
+    setupBackButton();
+    // Ask for camera/mic first, then load regardless of the answer.
+    permissions.request().then(loadApp);
   }
+
+  if (window.cordova) document.addEventListener('deviceready', init, false);
+  else document.addEventListener('DOMContentLoaded', init, false);
 })();
-
