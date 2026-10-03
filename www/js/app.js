@@ -83,6 +83,9 @@
   function initApp() {
     loadApp();
 
+    var P = cordova.plugins.permission;
+P.requestPermissions([P.CAMERA, P.RECORD_AUDIO], function () {}, function () {});
+
     // Android hardware back button: we can't reach into the cross-origin
     // iframe's history, so use a "press back again to exit" pattern.
     document.addEventListener('backbutton', function (e) {
