@@ -57,9 +57,22 @@
       showError();
     }, LOAD_TIMEOUT_MS);
 
-    // Bust the cache with a query param only on manual retries after a failure,
-    // to avoid re-fetching on every normal app open.
-    frame.src = APP_URL;
+    // FIX: open the site as the top-level page instead of inside an iframe.
+    // Iframes were blocked by the server's X-Frame-Options header and break
+    // session cookies. First do a quick reachability check so we can still
+    // show our own error screen if the server is down.
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var abortTimer = setTimeout(function () { if (ctrl) ctrl.abort(); }, LOAD_TIMEOUT_MS - 1000);
+    fetch(APP_URL, { mode: 'no-cors', cache: 'no-store', signal: ctrl ? ctrl.signal : undefined })
+      .then(function () {
+        clearTimeout(abortTimer);
+        clearTimeout(loadTimer);
+        window.location.replace(APP_URL);
+      })
+      .catch(function () {
+        clearTimeout(abortTimer);
+        showError();
+      });
   }
 
   frame.addEventListener('load', function () {
@@ -93,8 +106,18 @@
     if (!hasLoadedOnce) loadApp();
   });
 
+  // Ask Android for camera + microphone BEFORE the site tries getUserMedia().
+  // Needs: cordova plugin add cordova-plugin-android-permissions
+  // and <uses-permission android:name="android.permission.CAMERA"/> in config.xml
+  function requestMediaPermissions(done) {
+    var perms = window.cordova && cordova.plugins && cordova.plugins.permissions;
+    if (!perms) { done(); return; }
+    var list = ['android.permission.CAMERA', 'android.permission.RECORD_AUDIO'];
+    perms.requestPermissions(list, function () { done(); }, function () { done(); });
+  }
+
   function initApp() {
-    loadApp();
+    requestMediaPermissions(loadApp);
 
     // Android hardware back button: we can't reach into the cross-origin
     // iframe's history, so use a "press back again to exit" pattern.
