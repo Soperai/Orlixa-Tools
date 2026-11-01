@@ -1,7 +1,42 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8"><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'self' data: gap: content: blob: mediastream:; style-src * 'self' 'unsafe-inline' https:; script-src * 'self' 'unsafe-inline' 'unsafe-eval' https: blob:; img-src * 'self' data: blob: content: https:; media-src * 'self' data: blob: content: mediastream: https:; font-src * 'self' https: data:; connect-src * 'self' https: wss: blob: data:; frame-src * 'self' https: blob: data:;">
+    <title>Orlixa</title>
+    <link rel="stylesheet" href="css/app.css">
+    <script src="cordova.js"></script>
+    <script src="js/config.js"></script>
+</head>
+<body>
+    <div id="loading-screen" class="screen-overlay">
+        <div class="spinner"></div>
+        <p class="loading-text">Loading Orlixa...</p>
+    </div>
+
+    <div id="error-screen" class="screen-overlay hidden">
+        <div class="error-content">
+            <div class="error-icon">⚡</div>
+            <h2>Connection Error</h2>
+            <p id="error-msg">Unable to connect to Orlixa. Please check your internet connection.</p>
+            <button id="retry-btn">Retry</button>
+        </div>
+    </div>
+
+    <iframe
+        id="web-frame"
+        src="about:blank"
+        allow="camera *; microphone *; geolocation *; autoplay *; clipboard-read *; clipboard-write *; display-capture *; fullscreen *"
+        allowfullscreen>
+    </iframe>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
   <!--
     CSP allows the remote origin the app wraps. Add any additional domains
     (API/CDN/auth providers) the site loads to connect-src / frame-src / img-src as needed.
