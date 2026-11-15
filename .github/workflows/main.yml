@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android APK & Play Store AAB
 
 on:
   push:
@@ -6,6 +6,109 @@ on:
   workflow_dispatch: {}
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install required Android SDK parts
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Install Cordova CLI
+        run: npm install -g cordova
+
+      - name: Install project dependencies
+        run: npm install
+
+      - name: Add Android platform
+        run: cordova platform add android
+
+      - name: Verify camera/mic permissions and plugin
+        run: |
+          MANIFEST=platforms/android/app/src/main/AndroidManifest.xml
+          echo "---- permissions in generated manifest ----"
+          grep "uses-permission" "$MANIFEST" || true
+          grep -q "android.permission.CAMERA" "$MANIFEST" || { echo "::error::CAMERA permission missing from manifest"; exit 1; }
+          grep -q "android.permission.RECORD_AUDIO" "$MANIFEST" || { echo "::error::RECORD_AUDIO permission missing from manifest"; exit 1; }
+          echo "---- installed plugins ----"
+          cordova plugin ls
+          cordova plugin ls | grep -q "cordova-plugin-android-permissions" || { echo "::error::permissions plugin not installed"; exit 1; }
+
+      - name: Build debug APK
+        run: cordova build android --debug --verbose
+
+      - name: Locate APK
+        id: apk
+        run: |
+          APK_PATH=$(find platforms/android -name "*-debug.apk" | head -n 1)
+          echo "Found APK at: $APK_PATH"
+          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: orlixa-debug-apk
+          path: ${{ steps.apk.outputs.path }}
+
+      - name: Prepare Upload Keystore
+        run: |
+          if [ ! -f "$GITHUB_WORKSPACE/orlixa-upload.jks" ]; then
+            keytool -genkeypair -v -keystore "$GITHUB_WORKSPACE/orlixa-upload.jks" \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -alias orlixa \
+              -storepass "OrlixaStorePass123!" -keypass "OrlixaStorePass123!" \
+              -dname "CN=Orlixa.art, OU=Orlixa App, O=Orlixa, L=Internet, ST=NA, C=US"
+          fi
+
+      - name: Build signed release AAB
+        run: |
+          cordova build android --release -- \
+            --packageType=bundle \
+            --keystore="$GITHUB_WORKSPACE/orlixa-upload.jks" \
+            --storePassword="OrlixaStorePass123!" \
+            --alias=orlixa \
+            --password="OrlixaStorePass123!"
+
+      - name: Locate and verify AAB
+        id: aab
+        run: |
+          AAB_PATH=$(find platforms/android -name "*.aab" | head -n 1)
+          echo "Found AAB at: $AAB_PATH"
+          if ! jarsigner -verify "$AAB_PATH" | grep -q "jar verified"; then
+            jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
+              -keystore "$GITHUB_WORKSPACE/orlixa-upload.jks" \
+              -storepass "OrlixaStorePass123!" -keypass "OrlixaStorePass123!" \
+              "$AAB_PATH" orlixa
+          fi
+          echo "path=$AAB_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Play Store AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: orlixa-release-aab
+          path: ${{ steps.aab.outputs.path }}
+
+      - name: Upload Keystore artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: orlixa-upload-keystore
+          path: ${{ github.workspace }}/orlixa-upload.jks:
   build:
     runs-on: ubuntu-latest
 
